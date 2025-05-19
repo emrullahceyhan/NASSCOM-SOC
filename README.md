@@ -385,33 +385,274 @@ Aşağıdaki komutları takip ederek hatanın giderildiğine bakın
 
 #### Verifying Custom Inverter Layout Design
 
-First check whether IO's are located on the intersecton of vertical and horizontal tracks. There is an
+First check whether IO's are located on the intersecton of vertical and horizontal tracks. There is an `tracks.info` file under `/home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs.tech/openlane/sky130_fd_sc_hd`. In this file width and pitch information of the all metals both in x and y direction. 
+
+This is what tracks.info includes.
+
+#### Buraya 40.ss i ekle
+
+li1 için intersction kontrolünü kolay yapabilmek için magic tool içindeki grid sizelarını li1 için yazan değeler ile değiştirirsek kolayca görebiliriz.
+
+```sh
+# First open inverter design
+> magic -T sky130A.tech sky130_inv.mag &
+
+# Then change grid size by using tckon screen
+> grid 0.46um 0.34um 0.23um 0.17um
+```
+We can see that input and output intersect with vertical and horizontal tracks.
+
+#### Buraya 41.ss i ekle
+
+Second rule we need to check is that the width of transistor must be odd multiple of x pitch. As we know from tracks.info file the x witch is 0.46um.
+
+#### Buraya 42.ss i ekle
+
+As we can see the above picture the width of transistor is 1.38um so;
+> widht = 1.38um = 0.46um * 3 
+
+This proves the second condition.
+
+Same condition is for heigth of standart cell.
+
+#### Buraya 43.ss i ekle
+
+> Heigth of cell 2.72um = 0.34um * 8
+
+Bu durumda kontrol edildiğine göre tasarımımız hazır diyebiliriz. Önceliklde tasarımı tckon ekranından kaydedelim.
+
+```sh
+# save design with different name
+> save sky130_vsdinv.mag
+
+# Then exit from design
+> exit
+
+# Open new design
+> magic -T sky130A.tech sky130_vsdinv.mag &
+
+# Write lef file
+> lef write
+```
+Aşağıda yeni tasarımı görebilirsiniz.
+#### Buraya 44.ss i ekle
 
 
+This is new generated lef file.
+#### Buraya 45.ss i ekle
+
+Inverter tasarımının picorv32a içine entegre etmek için öncelikle aşağıdaki adımları uygulamamız gerek.
+
+```sh
+# Copy lef file under src of picorv32a
+> cp sky130_vsdinv.lef ~/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/src/
+# Copy typical, slow and fast libs under src
+> cp libs/sky130_fd_sc_hd__* ~/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/src/
+```
+Gerekli dosyaları kopyaladıktan sonra config.tcl üzerinde aşağıdaki kodları eklememiz lazım. Bu dosya `/home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a` pathi altındadır.
+
+```sh
+set ::env(LIB_SYNTH) "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__typical.lib"
+set ::env(LIB_FASTEST) "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__fast.lib"
+set ::env(LIB_SLOWEST) "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__slow.lib"
+set ::env(LIB_TYPICAL) "$::env(OPENLANE_ROOT)/designs/picorv32a/src/sky130_fd_sc_hd__typical.lib"
+
+set ::env(EXTRA_LEFS) [glob $::env(OPENLANE_ROOT)/designs/$::env(DESIGN_NAME)/src/*.lef]
+```
+config.tcl dosyasının görüntüsü aşağıdadır.
+
+#### Buraya 46.ss i ekle
+
+Custom inverter tasarımını OpenLane flowuna eklemek için aşağıdaki adımları takip edin.
+
+```sh
+# Go to this directory
+> cd Desktop/work/tools/openlane_working_dir/openlane
+
+# open docker
+> docker
+
+# Enter OpenLane flow with interactive mode
+> ./flow.tcl -interactive
+
+# Enter require package
+> package require openlane 0.9
+
+# Initialize design
+> prep -design picorv32a
+
+# Use this commands for include new added lef file
+> set lefs [glob $::env(DESIGN_DIR)/src/*.lef]
+> add_lefs -src $lefs
+
+# run synthesis
+> run_synthesis
+```
+
+This is the synthesis result of design.
+
+#### Buraya 47.ss i ekle
+
+Görselde göründüğü üzere timing violationlar var. Bunları azaltmak için aşağıdaki stratejileri kullanacağız.
+
+```sh
+# prep design again and overwrite you last work
+> prep -design picorv32a 19-05_20-01 -overwrite
+
+# Use this commands for include new added lef file
+> set lefs [glob $::env(DESIGN_DIR)/src/*.lef]
+> add_lefs -src $lefs
+
+# synth strateji more tends to improve time. if it is 3, it will be more tend to reduce area. 
+> set ::env(SYNTH_STRATEGY) "DELAY 3"
+> set ::env(SYNTH_SIZING) 1
+# then run synthesis again
+> run_synthesis
+```
+
+Now as we see WNS and TNS is 0s.
+
+#### Buraya 48.ss i ekle
+
+Then run floorplan.
+
+```sh
+# Now we can run floorplan
+> run_floorplan
+```
+After run the command an error is occured.
+#### Buraya 49.ss i ekle
+
+Bunu çözmek için aşağıdaki adımları uygulayın.
+
+```sh
+> init_floorplan
+> place_io
+> tap_decap_or
+```
+Then run placement
+```sh
+> run_placement
+```
+Aşağıda placement sonucu terminal çıktısı mevcut.
+
+#### Buraya 50.ss i ekle
+
+Placement sonucunu görmek için aşağıdaki adımları takip edin.
+
+```sh 
+# Go to placement results directory
+> cd /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/runs/19-05_21-10/results/placement
+
+# Open layout with magic tool
+> magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs.tech/magic/sky130A.tech lef read ../../tmp/merged.lef def read picorv32a.placement.def &
+```
+
+Placement sonucu aşağıda gösterilmektedir. Resimde görüldüğü gibi custom inverter bloğumuz place edilmiş.
+
+#### Buraya 51.ss i ekle
+
+tckon ekranına alttaki komutu eklerseniz metal layer layout görülmektedir.
+```sh
+# metal layer view
+> expand
+```
+#### Buraya 52.ss i ekle
 
 
+#### Post Synthesis Timing
+Bu aşamada base.sdc üzerinde değişiklik yaparak WNS ve TNS de iyileştirmeler yapmaya çalışacağız. Bir önceki çalışmamızda 0s WNS olduğu için stratejilerimizi eski haline alıp negative slack alalaım tekrardan.
 
+```sh
+# Go to this directory
+> cd Desktop/work/tools/openlane_working_dir/openlane
 
+# open docker
+> docker
 
+# Enter OpenLane flow with interactive mode
+> ./flow.tcl -interactive
 
+# Enter require package
+> package require openlane 0.9
 
+# Initialize design
+> prep -design picorv32a
 
+# Use this commands for include new added lef file
+> set lefs [glob $::env(DESIGN_DIR)/src/*.lef]
+> add_lefs -src $lefs
 
+# run synthesis
+> run_synthesis
+```
+Terminalde göründüğü gibi yine negative slack hatamız var.
 
+#### Buraya 53.ss i ekle
 
+Öncelikle yüksek fanout limitlemesi yapıp tekrar sentez yapıyoruz.
 
+```sh
+# Go to this directory
+> cd Desktop/work/tools/openlane_working_dir/openlane
 
+# open docker
+> docker
 
+# Enter OpenLane flow with interactive mode
+> ./flow.tcl -interactive
 
+# Enter require package
+> package require openlane 0.9
 
+# Initialize design
+> prep -design picorv32a
 
+# Use this commands for include new added lef file
+> set lefs [glob $::env(DESIGN_DIR)/src/*.lef]
+> add_lefs -src $lefs
+> set ::env(SYNTH_SIZING) 1
 
+# Limit fanout
+> set ::env(SYNTH_MAX_FANOUT) 4
 
+# run synthesis
+> run_synthesis
+```
+#### Buraya 54.ss i ekle
 
+Yukarıda görüldüğü gibi hala timing sorunu devam etmekte.
 
+Başka terminalden bu komutu çalıştırıp timing detaylarına bakalım.
 
+```sh
+> cd Desktop/work/tools/openlane_working_dir/openlane
 
+> sta pre_sta.conf
+```
+#### Buraya 55.ss i ekle
 
+Burada 4 fanoutu olan bir or gate var. Bunun drive strength değerini 2 den 4 e çıkarıp tekrar deneyelim.
 
+```sh
+> report_net -connections _10566_
+> replace_cell _13165_ sky130_fd_sc_hd__or3_4
+> report_checks -fields {net cap slew input_pins} -digits 4
+```
+Bu düzeltme ile slack üzerindeki düşüş görülebilir.
 
+#### Buraya 56.ss i ekle
+
+Aynı düzeltmeyi başka bir gate üzerinde yapacağız.
+
+#### Buraya 57.ss i ekle
+
+```sh
+> report_net -connections _10534_
+> replace_cell _13132_ sky130_fd_sc_hd__or4_4
+> report_checks -fields {net cap slew input_pins} -digits 4
+```
+Terminalde göründüğü gibi slack değeri tekrardan düştü.
+
+#### Buraya 58.ss i ekle
 
