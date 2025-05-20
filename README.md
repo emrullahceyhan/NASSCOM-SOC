@@ -656,3 +656,264 @@ Terminalde göründüğü gibi slack değeri tekrardan düştü.
 
 #### Buraya 58.ss i ekle
 
+Şimdi bu güncel netlisti flowumuzun içine dahil edeceğiz. Bir yedeğini alıp write_verilog komutu ile overwrite etmemiz lazım.
+
+```sh
+# Go to synthesis result directory
+> cd /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/runs/19-05_23-26/results/synthesis
+
+# Yedek al 
+> cp picorv32a.synthesis.v picorv32a.synthesis_old.v
+```
+
+Ardından sta ekranında aşağıdaki komutu çalıştır.
+```sh
+# Overwriting current synthesis netlist
+> write_verilog /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/runs/19-05_23-26/results/synthesis/picorv32a.synthesis.v
+```
+#### Buraya 62.ss i ekle
+
+Ardından CTS adımına gitmek için aşağıdaki komutları kullanın.Bu komutları OpenLane terminalinde çalıştırın.
+```sh
+# synthesis
+> run_synthesis
+```
+
+#### Buraya 59.ss i ekle
+
+```sh
+# Commands for floorplan
+> init_floorplan
+> place_io
+> tap_decap_or
+
+# placment step
+> run_placement
+```
+
+#### Buraya 60.ss i ekle
+
+```sh
+# Then run cts
+> run_cts
+```
+
+#### Buraya 61.ss i ekle
+
+Post-CTS adımları için OpenRoad toolunu kullancağız.OpenLane terminali içinde OpenRoad'ı çalıştıralım.
+
+```sh
+# Invoke OpenRoad
+> openroad
+
+# Reading lef file
+> read_lef /openLANE_flow/designs/picorv32a/runs/19-05_23-26/tmp/merged.lef
+
+# Reading def file
+> read_def /openLANE_flow/designs/picorv32a/runs/19-05_23-26/results/cts/picorv32a.cts.def
+
+# Create OpenRoad Database
+> write_db pico_cts.db
+
+# Read created database
+> read_db pico_cts.db
+
+# Read netlist post CTS
+> read_verilog /openLANE_flow/designs/picorv32a/runs/19-05_23-26/results/synthesis/picorv32a.synthesis_cts.v
+
+# Read library for design
+> read_liberty $::env(LIB_SYNTH_COMPLETE)
+
+# Read in the custom sdc we created
+> read_sdc /openLANE_flow/designs/picorv32a/src/my_base.sdc
+
+# Setting all cloks as propagated clocks
+> set_propagated_clock [all_clocks]
+
+# Generate timing report
+> report_checks -path_delay min_max -format full_clock_expanded -digits 4
+```
+#### Buraya 63.ss i ekle
+Üstteki raporda göründüğü gibi Slack değerimiz 14.1462ns olmuş durumda.
+
+Bu adımda `'sky130_fd_sc_hd__clkbuf_1` cell i clock buffer listten kaldırıp post-CTS sonuçlarına bakacağız.
+```sh
+# Remove 'sky130_fd_sc_hd__clkbuf_1' from the list
+> set ::env(CTS_CLK_BUFFER_LIST) [lreplace $::env(CTS_CLK_BUFFER_LIST) 0 0
+
+# Setting def as placement def
+> set ::env(CURRENT_DEF) /openLANE_flow/designs/picorv32a/runs/19-05_23-26/results/placement/picorv32a.placement.def
+
+# Then run_cts
+> run_cts
+
+# Run OpenROAD tool
+> openroad
+
+# Reading lef file
+> read_lef /openLANE_flow/designs/picorv32a/runs/19-05_23-26/tmp/merged.lef
+
+# Reading def file
+> read_def /openLANE_flow/designs/picorv32a/runs/19-05_23-26/results/cts/picorv32a.cts.def
+
+# Create database with custom name
+> write_db pico_cts1.db
+
+# Loading the created database
+> read_db pico_cts1.db
+
+# Read netlist post CTS
+> read_verilog /openLANE_flow/designs/picorv32a/runs/19-05_23-26/results/synthesis/picorv32a.synthesis_cts.v
+
+# Read library for design
+> read_liberty $::env(LIB_SYNTH_COMPLETE)
+
+# Link design
+> link_design picorv32a
+
+# Read custom sdc
+> read_sdc /openLANE_flow/designs/picorv32a/src/my_base.sdc
+
+# Setting all cloks as propagated clocks
+> set_propagated_clock [all_clocks]
+
+# Generating custom timing report
+> report_checks -path_delay min_max -fields {slew trans net cap input_pins} -format full_clock_expanded -digits 4
+
+# Report hold skew
+> report_clock_skew -hold
+
+# Report setup skew
+> report_clock_skew -setup
+
+# Exit to OpenLANE flow
+> exit
+
+# Inserting 'sky130_fd_sc_hd__clkbuf_1' to first index of list
+> set ::env(CTS_CLK_BUFFER_LIST) [linsert $::env(CTS_CLK_BUFFER_LIST) 0 sky130_fd_sc_hd__clkbuf_1]
+```
+
+# Section 5 - Final steps for RTL2GDS using tritonRoute and openSTA 
+
+Execute Power Distribution Network (PDN) and explore the layout.
+
+```sh
+# Go to this directory
+> cd Desktop/work/tools/openlane_working_dir/openlane
+
+# open docker
+> docker
+
+# Enter OpenLane flow with interactive mode
+> ./flow.tcl -interactive
+
+# Enter require package
+> package require openlane 0.9
+
+# Initialize design
+> prep -design picorv32a
+
+# Use this commands for include new added lef file
+> set lefs [glob $::env(DESIGN_DIR)/src/*.lef]
+> add_lefs -src $lefs
+
+# Command to set new value for SYNTH_STRATEGY
+> set ::env(SYNTH_STRATEGY) "DELAY 3"
+
+# Command to set new value for SYNTH_SIZING
+> set ::env(SYNTH_SIZING) 1
+
+# run synthesis
+> run_synthesis
+
+# Commands for floorplan
+> init_floorplan
+> place_io
+> tap_decap_or
+
+# placment step
+> run_placement
+
+# Then run_cts
+> run_cts
+
+# Finally generate pdn
+> gen_pdn 
+```
+
+Bu adımlardan sonra terminal çıktısı aşağıdaki gibi olacaktır.
+#### Buraya 64.ss i ekle
+
+PDN den sonra oluşan layoutu görmek için alağıdaki komutları takip edin.
+
+```sh
+> cd Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/runs/20-05_20-50/tmp/floorplan
+
+> magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs.tech/magic/sky130A.tech lef read ../../tmp/merged.lef def read 14-pdn.def &
+```
+Screenshot of PDN
+#### Buraya 65.ss i ekle
+
+Then run routing.
+
+```sh
+> run_routing
+```
+
+Routing sonucunu terminalden görebilirsiniz.
+
+#### Buraya 66.ss i ekle
+
+Routing sonrası oluşan designı görmek için aşağıdaki adımları takip edin.
+```sh
+> cd /home/vsduser/Desktop/work/tools/openlane_working_dir/openlane/designs/picorv32a/runs/20-05_20-50/results/routing
+
+> magic -T /home/vsduser/Desktop/work/tools/openlane_working_dir/pdks/sky130A/libs.tech/magic/sky130A.tech lef read ../../tmp/merged.lef def read picorv32a.def &
+```
+Routing ekran görüntüleri ektedir.
+#### Buraya 67.ss i ekle
+#### Buraya 68.ss i ekle
+
+
+Son olarak extracted parasitler ile post-route OpenSta Timing analiz yapacağız. Bunun için aşağıdaki adımları takip edin.
+
+```sh
+# openroad
+> openroad
+
+# Reading lef file
+> read_lef /openLANE_flow/designs/picorv32a/runs/20-05_20-50/tmp/merged.lef
+
+# Reading def file
+> read_def /openLANE_flow/designs/picorv32a/runs/20-05_20-50/results/routing/picorv32a.def
+
+# Create database with custom name
+> write_db pico_route.db
+
+# Loading the created database
+> read_db pico_route.db
+
+# Read netlist
+> read_verilog /openLANE_flow/designs/picorv32a/runs/20-05_20-50/results/synthesis/picorv32a.synthesis_preroute.v
+
+# Read library for design
+> read_liberty $::env(LIB_SYNTH_COMPLETE)
+
+# Link design and library
+> link_design picorv32a
+
+# Read custom sdc
+> read_sdc /openLANE_flow/designs/picorv32a/src/my_base.sdc
+
+# Setting all cloks as propagated clocks
+> set_propagated_clock [all_clocks]
+
+> read_spef /openLANE_flow/designs/picorv32a/runs/20-05_20-50/results/routing/picorv32a.spef
+
+> report_checks -path_delay min_max -fields {slew trans net cap input_pins} -format full_clock_expanded -digits 4
+```
+
+Parasitic extractionlardan sonra slack 14.1462ns den 13.9090ns e düşmüştür. Aşağıda terminal çıktısı mevcut.
+
+#### Buraya 69.ss i ekle
+
